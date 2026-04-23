@@ -32,9 +32,9 @@ with st.sidebar:
     hours = st.slider("抓取時間範圍（小時）", 6, 72, 24, step=6)
     ai_available = has_ai()
     ai_enabled = st.toggle("AI 摘要", value=ai_available, disabled=not ai_available,
-                           help="需要 Gemini API Key")
+                           help="需要 Anthropic API Key")
     if not ai_available:
-        st.warning("未偵測到 AI 後端。\n\n請在 Streamlit Cloud → Settings → Secrets 加入：\n`GEMINI_API_KEY = \"AIza...\"`\n\n免費申請：aistudio.google.com")
+        st.warning("未偵測到 AI 後端。\n\n請在 Streamlit Cloud → Settings → Secrets 加入：\n`ANTHROPIC_API_KEY = \"sk-ant-...\"`\n\n申請：console.anthropic.com")
     st.markdown("---")
     refresh = st.button("重新整理", use_container_width=True)
     if st.session_state.summaries:
@@ -97,10 +97,10 @@ for tab, cat in zip(tabs, active_cats):
             if unsummarized:
                 if st.button(f"一鍵摘要本類 {len(unsummarized)} 篇",
                              key=f"batch_{cat}", use_container_width=True):
-                    progress = st.progress(0, text="AI 摘要中（每篇間隔 5 秒避免超過 API 速率限制）...")
+                    progress = st.progress(0, text="AI 摘要中...")
                     for i, article in enumerate(unsummarized):
                         if i > 0:
-                            time.sleep(5)  # 避免超過 Gemini 15 RPM
+                            time.sleep(1)  # Claude Haiku 速率足夠，保留小間隔
                         try:
                             summary_text = summarize(article)
                             _save_summary(article, summary_text)

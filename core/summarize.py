@@ -1,41 +1,34 @@
-"""AI 摘要：優先用 Gemini Flash（免費），fallback 到 Ollama（本地）"""
+"""AI 摘要：優先用 Claude Haiku，fallback 到 Ollama（本地）"""
 import os
 import requests
 from core.config import SUMMARY_PROMPT
+
+CLAUDE_MODEL = "claude-haiku-4-5"
 
 
 def _get_api_key() -> str | None:
     try:
         import streamlit as st
-        return st.secrets.get("GEMINI_API_KEY") or os.environ.get("GEMINI_API_KEY")
+        return st.secrets.get("ANTHROPIC_API_KEY") or os.environ.get("ANTHROPIC_API_KEY")
     except Exception:
-        return os.environ.get("GEMINI_API_KEY")
+        return os.environ.get("ANTHROPIC_API_KEY")
 
 
-def summarize_gemini(article: dict, api_key: str) -> str:
-    import google.generativeai as genai
-    genai.configure(api_key=api_key)
+def summarize_claude(article: dict, api_key: str) -> str:
+    from anthropic import Anthropic
+    client = Anthropic(api_key=api_key)
     prompt = SUMMARY_PROMPT.format(
         title=article["title"],
         source=article["source_name"],
         content=(article.get("content") or "")[:1200],
     )
-    # 依序嘗試不同 model，避開單一 model 的 quota 上限
-    for model_name in ["gemini-2.5-flash", "gemini-1.5-flash-latest", "gemini-2.0-flash"]:
-        try:
-            model = genai.GenerativeModel(model_name)
-            response = model.generate_content(
-                prompt,
-                generation_config={"temperature": 0.3, "max_output_tokens": 400},
-            )
-            return response.text.strip()
-        except Exception as e:
-            err_str = str(e).lower()
-            # quota / rate limit 才繼續試下一個 model，其他錯誤直接拋
-            if "429" not in err_str and "quota" not in err_str and "exhausted" not in err_str:
-                raise
-            continue
-    raise Exception("所有 Gemini model 當日 quota 都已用完，請明天再試")
+    response = client.messages.create(
+        model=CLAUDE_MODEL,
+        max_tokens=1024,
+        temperature=0.3,
+        messages=[{"role": "user", "content": prompt}],
+    )
+    return response.content[0].text.strip()
 
 
 def summarize_ollama(article: dict) -> str:
@@ -62,15 +55,14 @@ def summarize(article: dict) -> str:
     api_key = _get_api_key()
     if api_key:
         try:
-            return summarize_gemini(article, api_key)
+            return summarize_claude(article, api_key)
         except Exception as e:
-            return f"[Gemini API 錯誤: {type(e).__name__} — {str(e)[:200]}]"
-    # 只在本地有 Ollama 時才 fallback
+            return f"[Claude API 錯誤: {type(e).__name__} — {str(e)[:200]}]"
     try:
         requests.get("http://localhost:11434/api/tags", timeout=1)
         return summarize_ollama(article)
     except Exception:
-        return "[未設定 AI 後端：請在 Streamlit Cloud Secrets 加入 GEMINI_API_KEY]"
+        return "[未設定 AI 後端：請在 Streamlit Cloud Secrets 加入 ANTHROPIC_API_KEY]"
 
 
 def has_ai() -> bool:

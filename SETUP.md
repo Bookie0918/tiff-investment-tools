@@ -4,12 +4,12 @@
 
 ---
 
-## 1. Gemini API Key（AI 摘要）
+## 1. Anthropic API Key（AI 摘要 — Claude Haiku）
 
-1. 去 https://aistudio.google.com
-2. 用 Google 帳號登入
-3. 左上角「**Get API key**」→「Create API key」
-4. 複製那串 `AIza...`
+1. 去 https://console.anthropic.com
+2. 登入後左側 **API Keys** → **Create Key**
+3. 複製 `sk-ant-...` 那串
+4. 需要在 Billing 充值最少 $5（Haiku 成本極低，$5 約可跑 3000+ 篇摘要）
 
 ---
 
@@ -56,7 +56,7 @@
 Streamlit Cloud → 你的 app → **Settings → Secrets**，貼入：
 
 ```toml
-GEMINI_API_KEY = "AIza..."
+ANTHROPIC_API_KEY = "sk-ant-..."
 SUPABASE_URL = "https://xxx.supabase.co"
 SUPABASE_KEY = "eyJ..."
 
