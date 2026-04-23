@@ -1,6 +1,6 @@
 # 部署設定指南
 
-三個外部服務要設定，全部免費。約 15 分鐘。
+兩個外部服務要設定，全部免費。約 10 分鐘。
 
 ---
 
@@ -28,30 +28,7 @@
 
 ---
 
-## 3. Google OAuth（登入）
-
-1. 去 https://console.cloud.google.com
-2. 建立專案：`tiff-investment`（或選現有專案）
-3. 左側選單 → **APIs & Services → OAuth consent screen**
-   - User Type：External
-   - App name：Tiff 投資研究工具
-   - Support email：你的 email
-   - Authorized domains：`streamlit.app`
-   - Scopes：加入 `openid`, `email`, `profile`
-4. 左側 **Credentials → Create Credentials → OAuth client ID**
-   - Application type：Web application
-   - Authorized redirect URIs：加入
-     ```
-     https://tiff-investment-tools.streamlit.app/oauth2callback
-     ```
-     （把 domain 換成你的 Streamlit URL）
-5. 建好後複製：
-   - **Client ID**
-   - **Client secret**
-
----
-
-## 4. 貼進 Streamlit Cloud Secrets
+## 3. 貼進 Streamlit Cloud Secrets
 
 Streamlit Cloud → 你的 app → **Settings → Secrets**，貼入：
 
@@ -59,30 +36,28 @@ Streamlit Cloud → 你的 app → **Settings → Secrets**，貼入：
 ANTHROPIC_API_KEY = "sk-ant-..."
 SUPABASE_URL = "https://xxx.supabase.co"
 SUPABASE_KEY = "eyJ..."
-
-[auth]
-redirect_uri = "https://tiff-investment-tools.streamlit.app/oauth2callback"
-cookie_secret = "隨機生成一串，至少 32 字"
-
-[auth.google]
-client_id = "xxx.apps.googleusercontent.com"
-client_secret = "GOCSPX-xxx"
-server_metadata_url = "https://accounts.google.com/.well-known/openid-configuration"
 ```
 
-`cookie_secret` 生成：
-```bash
-python3 -c "import secrets; print(secrets.token_urlsafe(32))"
-```
+⚠️ **不要**加 `[auth]` / `[auth.google]` 區塊 — 那會啟動 Streamlit 原生 auth，把整個 app 鎖住。本 app 用自己的 email 輸入模式，不需要 Google OAuth。
 
 儲存後 Streamlit 會自動重啟。**完成。**
 
 ---
 
+## 4. Streamlit Cloud Sharing 設定
+
+**一定要把 app 設成公開**：
+
+1. Streamlit Cloud → 你的 app → **Settings → Sharing**
+2. 「Who can view this app」選 **This app is public and searchable**
+3. Save
+
+---
+
 ## 測試流程
 
-1. 開網站 → 看到「使用 Google 登入」
-2. 登入 → 看到 Home 頁「歡迎，你的名字」
-3. 去 Portfolio → 上傳 CSV → 勾選「保存到帳號」→ 按「保存並顯示」
-4. **關閉網站，再打開、再登入** → 看到「已保存資料」頁保留了上次的 portfolio
-5. 去市場日報 → AI 摘要 → 關閉再打開登入 → 摘要還在
+1. 開網站 → 看到「進入工具 / 輸入 email」
+2. 輸入任一 email → 進入 Home 頁
+3. 去 Portfolio → 上傳 CSV → 資料自動綁到 email
+4. **關閉網站，再打開、再輸入同一 email** → 看到上次的 portfolio
+5. 去市場日報 → 一鍵摘要 → 摘要自動保存
