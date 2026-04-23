@@ -1,4 +1,4 @@
-"""AI 摘要：優先用 Anthropic API（雲端），fallback 到 Ollama（本地）"""
+"""AI 摘要：優先用 Gemini Flash（免費），fallback 到 Ollama（本地）"""
 import os
 import requests
 from core.config import SUMMARY_PROMPT
@@ -7,25 +7,25 @@ from core.config import SUMMARY_PROMPT
 def _get_api_key() -> str | None:
     try:
         import streamlit as st
-        return st.secrets.get("ANTHROPIC_API_KEY") or os.environ.get("ANTHROPIC_API_KEY")
+        return st.secrets.get("GEMINI_API_KEY") or os.environ.get("GEMINI_API_KEY")
     except Exception:
-        return os.environ.get("ANTHROPIC_API_KEY")
+        return os.environ.get("GEMINI_API_KEY")
 
 
-def summarize_anthropic(article: dict, api_key: str) -> str:
-    import anthropic
-    client = anthropic.Anthropic(api_key=api_key)
+def summarize_gemini(article: dict, api_key: str) -> str:
+    import google.generativeai as genai
+    genai.configure(api_key=api_key)
+    model = genai.GenerativeModel("gemini-2.0-flash")
     prompt = SUMMARY_PROMPT.format(
         title=article["title"],
         source=article["source_name"],
         content=(article.get("content") or "")[:1200],
     )
-    msg = client.messages.create(
-        model="claude-haiku-4-5-20251001",
-        max_tokens=400,
-        messages=[{"role": "user", "content": prompt}],
+    response = model.generate_content(
+        prompt,
+        generation_config={"temperature": 0.3, "max_output_tokens": 400},
     )
-    return msg.content[0].text.strip()
+    return response.text.strip()
 
 
 def summarize_ollama(article: dict) -> str:
@@ -35,13 +35,13 @@ def summarize_ollama(article: dict) -> str:
         content=(article.get("content") or "")[:1200],
     )
     try:
+        import json
         resp = requests.post(
             "http://localhost:11434/api/generate",
             json={"model": "qwen2.5:14b", "prompt": prompt, "stream": False,
                   "options": {"temperature": 0.3, "num_predict": 400}},
             timeout=90,
         )
-        import json
         data = json.loads(resp.text)
         return data.get("response", "").strip()
     except Exception as e:
@@ -52,14 +52,13 @@ def summarize(article: dict) -> str:
     api_key = _get_api_key()
     if api_key:
         try:
-            return summarize_anthropic(article, api_key)
+            return summarize_gemini(article, api_key)
         except Exception:
             pass
     return summarize_ollama(article)
 
 
 def has_ai() -> bool:
-    """判斷是否有可用的 AI 後端"""
     if _get_api_key():
         return True
     try:

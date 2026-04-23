@@ -38,4 +38,4 @@ with col2:
     """)
 
 st.markdown("---")
-st.caption("所有資料來源均為免費公開資訊。AI 摘要由 Claude Haiku 生成。")
+st.caption("所有資料來源均為免費公開資訊。AI 摘要由 Gemini Flash 生成（免費）。")

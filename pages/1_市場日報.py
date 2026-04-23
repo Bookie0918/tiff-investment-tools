@@ -16,7 +16,7 @@ with st.sidebar:
     ai_enabled = st.toggle("AI 摘要", value=has_ai(),
                            help="需要 Anthropic API Key 或本地 Ollama")
     if not has_ai():
-        st.warning("未偵測到 AI 後端。\n\n在 Streamlit Cloud 的 Secrets 加入：\n`ANTHROPIC_API_KEY = \"sk-...\"`")
+        st.warning("未偵測到 AI 後端。\n\n在 Streamlit Cloud 的 Secrets 加入：\n`GEMINI_API_KEY = \"AIza...\"`")
     refresh = st.button("🔄 重新整理", use_container_width=True)
 
 # ── 快取抓取（1 小時 TTL）──
