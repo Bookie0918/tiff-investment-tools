@@ -15,17 +15,27 @@ def _get_api_key() -> str | None:
 def summarize_gemini(article: dict, api_key: str) -> str:
     import google.generativeai as genai
     genai.configure(api_key=api_key)
-    model = genai.GenerativeModel("gemini-2.0-flash")
     prompt = SUMMARY_PROMPT.format(
         title=article["title"],
         source=article["source_name"],
         content=(article.get("content") or "")[:1200],
     )
-    response = model.generate_content(
-        prompt,
-        generation_config={"temperature": 0.3, "max_output_tokens": 400},
-    )
-    return response.text.strip()
+    # 依序嘗試不同 model，避開單一 model 的 quota 上限
+    for model_name in ["gemini-2.5-flash", "gemini-1.5-flash-latest", "gemini-2.0-flash"]:
+        try:
+            model = genai.GenerativeModel(model_name)
+            response = model.generate_content(
+                prompt,
+                generation_config={"temperature": 0.3, "max_output_tokens": 400},
+            )
+            return response.text.strip()
+        except Exception as e:
+            err_str = str(e).lower()
+            # quota / rate limit 才繼續試下一個 model，其他錯誤直接拋
+            if "429" not in err_str and "quota" not in err_str and "exhausted" not in err_str:
+                raise
+            continue
+    raise Exception("所有 Gemini model 當日 quota 都已用完，請明天再試")
 
 
 def summarize_ollama(article: dict) -> str:
