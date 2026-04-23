@@ -5,19 +5,31 @@ import streamlit as st
 from core.fetch import fetch_all
 from core.summarize import summarize, has_ai
 from core.config import CATEGORY_LABELS
+from core.style import inject
 
 st.set_page_config(page_title="市場日報", page_icon="📰", layout="wide")
-st.title("📰 市場資訊日報")
+inject()
+st.title("市場資訊日報")
+
+# ── 用 session_state 存 AI 摘要（避免 rerun 丟失）──
+if "summaries" not in st.session_state:
+    st.session_state.summaries = {}
 
 # ── 側邊欄控制 ──
 with st.sidebar:
-    st.header("設定")
+    st.markdown("### 設定")
     hours = st.slider("抓取時間範圍（小時）", 6, 72, 24, step=6)
-    ai_enabled = st.toggle("AI 摘要", value=has_ai(),
-                           help="需要 Anthropic API Key 或本地 Ollama")
-    if not has_ai():
-        st.warning("未偵測到 AI 後端。\n\n在 Streamlit Cloud 的 Secrets 加入：\n`GEMINI_API_KEY = \"AIza...\"`")
-    refresh = st.button("🔄 重新整理", use_container_width=True)
+    ai_available = has_ai()
+    ai_enabled = st.toggle("AI 摘要", value=ai_available, disabled=not ai_available,
+                           help="需要 Gemini API Key 或本地 Ollama")
+    if not ai_available:
+        st.warning("未偵測到 AI 後端。\n\n在 Streamlit Cloud → Settings → Secrets 加入：\n`GEMINI_API_KEY = \"AIza...\"`\n\nGemini 免費 API key 在 aistudio.google.com")
+    st.markdown("---")
+    refresh = st.button("重新整理", use_container_width=True)
+    if st.session_state.summaries:
+        if st.button(f"清除 {len(st.session_state.summaries)} 筆摘要", use_container_width=True):
+            st.session_state.summaries = {}
+            st.rerun()
 
 # ── 快取抓取（1 小時 TTL）──
 @st.cache_data(ttl=3600, show_spinner="正在抓取新聞...")
@@ -48,41 +60,67 @@ tab_labels = [f"{CATEGORY_LABELS[c]} ({counts[c]})" for c in cats if counts[c] >
 active_cats = [c for c in cats if counts[c] > 0]
 tabs = st.tabs(tab_labels)
 
+def _get_summary(article):
+    """從 session_state 取摘要"""
+    return st.session_state.summaries.get(article["link"])
+
+def _save_summary(article, summary_text):
+    st.session_state.summaries[article["link"]] = summary_text
+
 for tab, cat in zip(tabs, active_cats):
     with tab:
         cat_articles = [a for a in articles if a["category"] == cat]
 
+        # ── 一鍵摘要全部 ──
         if ai_enabled:
-            if st.button(f"⚡ 一鍵摘要全部 {len(cat_articles)} 篇", key=f"batch_{cat}"):
-                progress = st.progress(0, text="AI 摘要中...")
-                for i, article in enumerate(cat_articles):
-                    if not article["summary"]:
-                        article["summary"] = summarize(article)
-                    progress.progress((i + 1) / len(cat_articles),
-                                      text=f"({i+1}/{len(cat_articles)}) {article['title'][:40]}...")
-                progress.empty()
-                st.rerun()
+            unsummarized = [a for a in cat_articles if not _get_summary(a)]
+            if unsummarized:
+                if st.button(f"一鍵摘要本類 {len(unsummarized)} 篇",
+                             key=f"batch_{cat}", use_container_width=True):
+                    progress = st.progress(0, text="AI 摘要中...")
+                    for i, article in enumerate(unsummarized):
+                        try:
+                            summary_text = summarize(article)
+                            _save_summary(article, summary_text)
+                        except Exception as e:
+                            _save_summary(article, f"[摘要失敗: {e}]")
+                        progress.progress(
+                            (i + 1) / len(unsummarized),
+                            text=f"({i+1}/{len(unsummarized)}) {article['title'][:40]}..."
+                        )
+                    progress.empty()
+                    st.rerun()
+            else:
+                st.success("本類全部已摘要")
 
+        st.markdown("")
+
+        # ── 文章卡片 ──
         for article in cat_articles:
-            with st.container():
-                col_title, col_time = st.columns([4, 1])
-                with col_title:
-                    st.markdown(f"**[{article['title']}]({article['link']})**")
-                with col_time:
-                    st.caption(f"🕐 {article['published'][-12:-4]}")
+            col_title, col_time = st.columns([5, 1])
+            with col_title:
+                st.markdown(f"**[{article['title']}]({article['link']})**")
+            with col_time:
+                st.caption(article['published'][-12:-4])
 
-                st.caption(f"來源：{article['source_name']}")
+            st.caption(f"{article['source_name']}")
 
-                if article["summary"]:
-                    st.info(article["summary"])
-                elif ai_enabled:
-                    if st.button("AI 摘要", key=f"sum_{hash(article['title'])}"):
-                        with st.spinner("摘要中..."):
-                            article["summary"] = summarize(article)
-                        st.rerun()
-                else:
-                    if article.get("content"):
-                        with st.expander("原文摘錄"):
-                            st.write(article["content"][:500] + "...")
+            existing = _get_summary(article)
+            if existing:
+                st.info(existing)
+            elif ai_enabled:
+                btn_key = f"sum_{hash(article['link'])}"
+                if st.button("AI 摘要", key=btn_key):
+                    with st.spinner("摘要中..."):
+                        try:
+                            summary_text = summarize(article)
+                            _save_summary(article, summary_text)
+                        except Exception as e:
+                            _save_summary(article, f"[摘要失敗: {e}]")
+                    st.rerun()
+            else:
+                if article.get("content"):
+                    with st.expander("原文摘錄"):
+                        st.write(article["content"][:500] + "...")
 
-                st.divider()
+            st.divider()

@@ -8,9 +8,11 @@ import plotly.graph_objects as go
 import tempfile
 from pathlib import Path
 from core.importers import auto_detect, FutuImporter, IBImporter, BinanceImporter, GenericImporter
+from core.style import inject
 
 st.set_page_config(page_title="Portfolio 總覽", page_icon="💼", layout="wide")
-st.title("💼 Portfolio 總覽")
+inject()
+st.title("Portfolio 總覽")
 
 REQUIRED_COLS = ["symbol", "name", "qty", "market_value", "cost_price",
                  "current_price", "pnl", "currency", "platform"]
@@ -119,24 +121,31 @@ st.markdown("---")
 by_platform = full_df.groupby("platform")["market_value"].sum().reset_index()
 by_platform.columns = ["平台", "市值"]
 
+# withbookie 米白配色序列
+PALETTE = ["#8a6a10", "#b89048", "#7a7060", "#c4a661", "#968e7e", "#5a4a20"]
+
 c1, c2 = st.columns(2)
 with c1:
     st.subheader("各平台分配")
     fig_pie = px.pie(by_platform, values="市值", names="平台",
-                     color_discrete_sequence=px.colors.qualitative.Set2,
-                     hole=0.4)
-    fig_pie.update_traces(textposition="inside", textinfo="percent+label")
-    fig_pie.update_layout(showlegend=False, margin=dict(t=0, b=0, l=0, r=0))
+                     color_discrete_sequence=PALETTE, hole=0.5)
+    fig_pie.update_traces(textposition="inside", textinfo="percent+label",
+                          textfont=dict(color="#f4efe6", family="DM Sans, Noto Sans TC"))
+    fig_pie.update_layout(showlegend=False, margin=dict(t=0, b=0, l=0, r=0),
+                          paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)",
+                          font=dict(family="DM Sans, Noto Sans TC", color="#1c1810"))
     st.plotly_chart(fig_pie, use_container_width=True)
 
 with c2:
     st.subheader("各平台市值")
     fig_bar = px.bar(by_platform.sort_values("市值"),
                      x="市值", y="平台", orientation="h",
-                     color="平台",
-                     color_discrete_sequence=px.colors.qualitative.Set2)
+                     color="平台", color_discrete_sequence=PALETTE)
     fig_bar.update_layout(showlegend=False, margin=dict(t=0, b=0),
-                          yaxis_title=None, xaxis_title="市值")
+                          yaxis_title=None, xaxis_title="市值",
+                          paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)",
+                          font=dict(family="DM Sans, Noto Sans TC", color="#1c1810"))
+    fig_bar.update_xaxes(gridcolor="#d5cfc4")
     st.plotly_chart(fig_bar, use_container_width=True)
 
 # ── 持倉明細 ──
