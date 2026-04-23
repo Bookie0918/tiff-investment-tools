@@ -28,11 +28,17 @@ if email:
     col_a, col_b = st.columns([2, 1])
     with col_a:
         st.markdown(f"### 歡迎，{email}")
-        last = db.last_upload_time(email) if db.is_configured() else None
-        if last:
-            st.caption(f"上次更新 Portfolio：{last.strftime('%Y-%m-%d %H:%M')}")
-        else:
-            st.caption("尚未上傳過 Portfolio")
+        try:
+            last = db.last_upload_time(email) if db.is_configured() else None
+            if last:
+                st.caption(f"上次更新 Portfolio：{last.strftime('%Y-%m-%d %H:%M')}")
+            else:
+                st.caption("尚未上傳過 Portfolio")
+        except Exception as e:
+            st.caption("首次使用")
+            with st.expander("⚠ 資料庫連線有問題", expanded=False):
+                st.code(f"{type(e).__name__}: {str(e)[:500]}")
+                st.info("可能原因：\n1. Supabase 的 `holdings` 和 `summaries` 表還沒建立（需要在 SQL Editor 跑 schema）\n2. SUPABASE_KEY 填錯（要 anon public key）")
     with col_b:
         st.success("資料已連線，自動保存")
     st.markdown("---")
