@@ -53,9 +53,14 @@ def summarize(article: dict) -> str:
     if api_key:
         try:
             return summarize_gemini(article, api_key)
-        except Exception:
-            pass
-    return summarize_ollama(article)
+        except Exception as e:
+            return f"[Gemini API 錯誤: {type(e).__name__} — {str(e)[:200]}]"
+    # 只在本地有 Ollama 時才 fallback
+    try:
+        requests.get("http://localhost:11434/api/tags", timeout=1)
+        return summarize_ollama(article)
+    except Exception:
+        return "[未設定 AI 後端：請在 Streamlit Cloud Secrets 加入 GEMINI_API_KEY]"
 
 
 def has_ai() -> bool:

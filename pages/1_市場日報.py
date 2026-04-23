@@ -6,32 +6,45 @@ from core.fetch import fetch_all
 from core.summarize import summarize, has_ai
 from core.config import CATEGORY_LABELS
 from core.style import inject
+from core.auth import require_login, sidebar_user_panel, is_auth_configured
+from core import db
 
 st.set_page_config(page_title="市場日報", page_icon="📰", layout="wide")
 inject()
 st.title("市場資訊日報")
 
-# ── 用 session_state 存 AI 摘要（避免 rerun 丟失）──
+# ── 登入 ──
+if is_auth_configured():
+    email = require_login()
+    sidebar_user_panel()
+else:
+    email = None
+
+# ── 初始化：從 DB 載入上次摘要 ──
 if "summaries" not in st.session_state:
     st.session_state.summaries = {}
+    if email and db.is_configured():
+        st.session_state.summaries = db.load_summaries(email)
 
-# ── 側邊欄控制 ──
+# ── 側邊欄 ──
 with st.sidebar:
     st.markdown("### 設定")
     hours = st.slider("抓取時間範圍（小時）", 6, 72, 24, step=6)
     ai_available = has_ai()
     ai_enabled = st.toggle("AI 摘要", value=ai_available, disabled=not ai_available,
-                           help="需要 Gemini API Key 或本地 Ollama")
+                           help="需要 Gemini API Key")
     if not ai_available:
-        st.warning("未偵測到 AI 後端。\n\n在 Streamlit Cloud → Settings → Secrets 加入：\n`GEMINI_API_KEY = \"AIza...\"`\n\nGemini 免費 API key 在 aistudio.google.com")
+        st.warning("未偵測到 AI 後端。\n\n請在 Streamlit Cloud → Settings → Secrets 加入：\n`GEMINI_API_KEY = \"AIza...\"`\n\n免費申請：aistudio.google.com")
     st.markdown("---")
     refresh = st.button("重新整理", use_container_width=True)
     if st.session_state.summaries:
         if st.button(f"清除 {len(st.session_state.summaries)} 筆摘要", use_container_width=True):
             st.session_state.summaries = {}
+            if email and db.is_configured():
+                db.clear_summaries(email)
             st.rerun()
 
-# ── 快取抓取（1 小時 TTL）──
+# ── 抓取新聞 ──
 @st.cache_data(ttl=3600, show_spinner="正在抓取新聞...")
 def _fetch(h):
     return fetch_all(max_age_hours=h)
@@ -40,9 +53,8 @@ if refresh:
     st.cache_data.clear()
 
 articles = _fetch(hours)
-
 if not articles:
-    st.warning("沒有抓到文章，請稍後重試或檢查網路連線。")
+    st.warning("沒有抓到文章，請稍後重試。")
     st.stop()
 
 # ── KPI ──
@@ -55,23 +67,26 @@ for i, c in enumerate(cats):
 
 st.markdown("---")
 
+def _get_summary(article):
+    return st.session_state.summaries.get(article["link"])
+
+def _save_summary(article, summary_text):
+    st.session_state.summaries[article["link"]] = summary_text
+    if email and db.is_configured():
+        try:
+            db.save_summary(email, article["link"], article["title"], summary_text)
+        except Exception:
+            pass
+
 # ── 分類顯示 ──
 tab_labels = [f"{CATEGORY_LABELS[c]} ({counts[c]})" for c in cats if counts[c] > 0]
 active_cats = [c for c in cats if counts[c] > 0]
 tabs = st.tabs(tab_labels)
 
-def _get_summary(article):
-    """從 session_state 取摘要"""
-    return st.session_state.summaries.get(article["link"])
-
-def _save_summary(article, summary_text):
-    st.session_state.summaries[article["link"]] = summary_text
-
 for tab, cat in zip(tabs, active_cats):
     with tab:
         cat_articles = [a for a in articles if a["category"] == cat]
 
-        # ── 一鍵摘要全部 ──
         if ai_enabled:
             unsummarized = [a for a in cat_articles if not _get_summary(a)]
             if unsummarized:
@@ -95,7 +110,6 @@ for tab, cat in zip(tabs, active_cats):
 
         st.markdown("")
 
-        # ── 文章卡片 ──
         for article in cat_articles:
             col_title, col_time = st.columns([5, 1])
             with col_title:
@@ -109,8 +123,7 @@ for tab, cat in zip(tabs, active_cats):
             if existing:
                 st.info(existing)
             elif ai_enabled:
-                btn_key = f"sum_{hash(article['link'])}"
-                if st.button("AI 摘要", key=btn_key):
+                if st.button("AI 摘要", key=f"sum_{hash(article['link'])}"):
                     with st.spinner("摘要中..."):
                         try:
                             summary_text = summarize(article)
