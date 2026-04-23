@@ -1,37 +1,49 @@
-"""Google OAuth 登入包裝（Streamlit 1.42+ native auth）"""
+"""簡易 Email 登入：輸入 email → 用 email 當帳號 key 存 Supabase"""
+import re
 import streamlit as st
+from core import db
 
-
-def require_login() -> str | None:
-    """
-    如果使用者未登入，顯示登入按鈕，回傳 None 並 st.stop()。
-    如果已登入，回傳 email。
-    """
-    # Streamlit 1.42+ 的 st.user API
-    if not hasattr(st, "user") or not getattr(st.user, "is_logged_in", False):
-        st.markdown("### 登入")
-        st.caption("用 Google 帳號登入後，你的 portfolio 和 AI 摘要會自動保存，下次登入直接載入。")
-        if st.button("使用 Google 登入", type="primary"):
-            st.login("google")
-        st.stop()
-        return None
-    return st.user.email
-
-
-def sidebar_user_panel():
-    """在 sidebar 顯示登入狀態 + 登出按鈕"""
-    if hasattr(st, "user") and getattr(st.user, "is_logged_in", False):
-        with st.sidebar:
-            st.markdown("---")
-            name = getattr(st.user, "name", "") or st.user.email
-            st.caption(f"已登入：**{name}**")
-            if st.button("登出", use_container_width=True):
-                st.logout()
+EMAIL_PATTERN = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
 
 
 def is_auth_configured() -> bool:
-    """檢查 OAuth secrets 是否已配置"""
-    try:
-        return bool(st.secrets.get("auth", {}).get("google"))
-    except Exception:
-        return False
+    """有 DB 才需要登入"""
+    return db.is_configured()
+
+
+def require_login() -> str | None:
+    """若 DB 已設定，必須輸入 email；否則直接放行"""
+    if not db.is_configured():
+        return None
+
+    if st.session_state.get("user_email"):
+        return st.session_state.user_email
+
+    st.markdown("### 進入工具")
+    st.caption("輸入你常用的 email。你的 Portfolio 和 AI 摘要會用這個 email 自動保存，下次輸入同一個 email 即可載回。")
+
+    with st.form("login_form", clear_on_submit=False):
+        email = st.text_input("Email", placeholder="you@gmail.com")
+        submitted = st.form_submit_button("進入", type="primary", use_container_width=True)
+        if submitted:
+            cleaned = (email or "").strip().lower()
+            if EMAIL_PATTERN.match(cleaned):
+                st.session_state.user_email = cleaned
+                st.rerun()
+            else:
+                st.error("請輸入有效的 email（例如 tiff@gmail.com）")
+
+    st.stop()
+    return None
+
+
+def sidebar_user_panel():
+    """sidebar 顯示目前帳號 + 切換按鈕"""
+    if st.session_state.get("user_email"):
+        with st.sidebar:
+            st.markdown("---")
+            st.caption(f"帳號：**{st.session_state.user_email}**")
+            if st.button("切換帳號", use_container_width=True):
+                st.session_state.pop("user_email", None)
+                st.session_state.pop("summaries", None)
+                st.rerun()

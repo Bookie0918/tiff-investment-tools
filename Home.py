@@ -19,7 +19,7 @@ if is_auth_configured():
     sidebar_user_panel()
 else:
     email = None
-    st.info("提示：Admin 尚未配置 Google 登入。目前網站可使用但資料不會保存。")
+    st.info("提示：資料庫未設定，目前網站可使用但上傳的資料不會保存。")
 
 st.markdown("---")
 
@@ -27,17 +27,14 @@ st.markdown("---")
 if email:
     col_a, col_b = st.columns([2, 1])
     with col_a:
-        st.markdown(f"### 歡迎，{st.user.name if hasattr(st.user, 'name') else email}")
+        st.markdown(f"### 歡迎，{email}")
         last = db.last_upload_time(email) if db.is_configured() else None
         if last:
             st.caption(f"上次更新 Portfolio：{last.strftime('%Y-%m-%d %H:%M')}")
         else:
             st.caption("尚未上傳過 Portfolio")
     with col_b:
-        if db.is_configured():
-            st.success("資料已連線，自動保存")
-        else:
-            st.warning("資料庫未連線")
+        st.success("資料已連線，自動保存")
     st.markdown("---")
 
 col1, col2 = st.columns(2)
