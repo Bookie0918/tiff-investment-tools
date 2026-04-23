@@ -1,4 +1,4 @@
-import sys, os
+import sys, os, time
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
 import streamlit as st
@@ -70,9 +70,13 @@ st.markdown("---")
 def _get_summary(article):
     return st.session_state.summaries.get(article["link"])
 
+def _is_error(text: str) -> bool:
+    return text.startswith("[") and ("錯誤" in text or "失敗" in text or "error" in text.lower())
+
 def _save_summary(article, summary_text):
     st.session_state.summaries[article["link"]] = summary_text
-    if email and db.is_configured():
+    # 失敗的不存 DB，讓下次可以重試
+    if email and db.is_configured() and not _is_error(summary_text):
         try:
             db.save_summary(email, article["link"], article["title"], summary_text)
         except Exception:
@@ -88,12 +92,15 @@ for tab, cat in zip(tabs, active_cats):
         cat_articles = [a for a in articles if a["category"] == cat]
 
         if ai_enabled:
-            unsummarized = [a for a in cat_articles if not _get_summary(a)]
+            # 把錯誤訊息當作未摘要，允許重試
+            unsummarized = [a for a in cat_articles if not _get_summary(a) or _is_error(_get_summary(a))]
             if unsummarized:
                 if st.button(f"一鍵摘要本類 {len(unsummarized)} 篇",
                              key=f"batch_{cat}", use_container_width=True):
-                    progress = st.progress(0, text="AI 摘要中...")
+                    progress = st.progress(0, text="AI 摘要中（每篇間隔 5 秒避免超過 API 速率限制）...")
                     for i, article in enumerate(unsummarized):
+                        if i > 0:
+                            time.sleep(5)  # 避免超過 Gemini 15 RPM
                         try:
                             summary_text = summarize(article)
                             _save_summary(article, summary_text)
